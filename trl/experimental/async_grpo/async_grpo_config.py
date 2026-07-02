@@ -56,6 +56,15 @@ class AsyncGRPOConfig(_BaseConfig):
             Maximum number of tool-calling turns when training an agent. If `None`, there is no limit and generation
             stops when the model generates a response turn with no tool calls or when the total response length reaches
             `max_completion_length`.
+        rollout_protocol (`str`, *optional*, defaults to `"token"`):
+            How a multi-turn conversation is turned into training rows. `"token"` grows a token buffer, appending each
+            turn's generated tokens and tokenized tool results (fast; cannot represent a conversation rewrite).
+            `"message"` re-tokenizes the whole conversation every turn and reconciles the result against the tokens held
+            so far: a clean append stays one row, a rewrite (dropped reasoning, summarized history) forks a new row.
+        fork_threshold_tokens (`int`, *optional*, defaults to `1024`):
+            Message mode only. When a turn's re-tokenized prompt drifts inside the last generated answer, a drift with a
+            generated turn shorter than this many tokens is treated as a re-tokenization wobble (realigned as context)
+            rather than a rewrite (a new row). Ignored when `rollout_protocol="token"`.
 
         > Parameters that control the vLLM server
 
@@ -172,6 +181,22 @@ class AsyncGRPOConfig(_BaseConfig):
             "help": "Maximum number of tool-calling turns when training an agent. If `None`, there is no limit and "
             "generation stops when the model generates a response turn with no tool calls or when the total response "
             "length reaches `max_completion_length`."
+        },
+    )
+    rollout_protocol: str = field(
+        default="token",
+        metadata={
+            "help": "How a multi-turn conversation is turned into training rows. 'token' grows a token buffer "
+            "(fast; cannot represent a conversation rewrite). 'message' re-tokenizes the whole conversation every turn "
+            "and reconciles drift: a clean append stays one row, a rewrite forks a new row.",
+            "choices": ["token", "message"],
+        },
+    )
+    fork_threshold_tokens: int = field(
+        default=1024,
+        metadata={
+            "help": "Message mode only. A re-tokenization drift inside the last answer with a generated turn shorter "
+            "than this many tokens is realigned as context rather than forked into a new row."
         },
     )
 
