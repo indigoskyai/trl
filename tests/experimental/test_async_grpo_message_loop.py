@@ -12,14 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Unit tests for `MessageRolloutLoop._generate_one` with everything mocked (no tokenizer, no vLLM).
-
-The reconciler itself is tested in `test_async_grpo_trajectory.py`. Here we only check the loop's glue: each turn
-re-tokenizes the whole conversation, records the turn, runs tools, and finalizes into rows. We script per-turn
-`prompt_ids` (what the tokenizer "renders"), `turn_ids`/logprobs (what the model "generates"), and the parsed assistant
-message, so the loop runs on plain fixtures.
-"""
-
 import asyncio
 
 import trl.experimental.async_grpo.async_rollout_worker as worker
