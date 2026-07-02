@@ -48,8 +48,8 @@ def _bare_loop(reward_funcs):
 def _group(completions_sequences, completions_ids):
     n = len(completions_sequences)
     return RolloutGroup(
-        prompt=[{"role": "user", "content": "hi"}],
-        prompt_ids=[1, 2, 3],
+        prompts=[[{"role": "user", "content": "hi"}] for _ in range(n)],
+        prompt_ids=[[1, 2, 3] for _ in range(n)],
         reward_kwargs={},
         completions=[[{"role": "assistant", "content": f"c{i}"}] for i in range(n)],
         completions_ids=completions_ids,

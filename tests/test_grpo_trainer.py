@@ -56,6 +56,7 @@ from .testing_utils import (
 
 
 if is_peft_available():
+    import peft
     from peft import LoraConfig, PeftModel, get_peft_model
 
 
@@ -574,13 +575,18 @@ class TestGRPOTrainer(TrlTestCase):
         model = AutoModelForCausalLM.from_pretrained("trl-internal-testing/tiny-Qwen2ForCausalLM-2.5", dtype="float32")
         dataset = load_dataset("trl-internal-testing/zen", "standard_prompt_only", split="train")
         training_args = GRPOConfig(output_dir=self.tmp_dir, use_liger_kernel=True, report_to="none")
+        # ensure_weight_tying suppresses the PEFT weight-tying warning, which fires for target_modules since PEFT 0.19.0
+        lora_config = LoraConfig(
+            target_modules=["q_proj", "v_proj", "lm_head"],
+            **({"ensure_weight_tying": True} if Version(peft.__version__) >= Version("0.19.0") else {}),
+        )
         with pytest.raises(ValueError, match="lm_head"):
             GRPOTrainer(
                 model=model,
                 reward_funcs="trl-internal-testing/tiny-Qwen2ForSequenceClassification-2.5",
                 args=training_args,
                 train_dataset=dataset,
-                peft_config=LoraConfig(target_modules=["q_proj", "v_proj", "lm_head"]),
+                peft_config=lora_config,
             )
 
     @require_peft
@@ -614,12 +620,18 @@ class TestGRPOTrainer(TrlTestCase):
         model = AutoModelForCausalLM.from_pretrained("trl-internal-testing/tiny-Qwen2ForCausalLM-2.5", dtype="float32")
         dataset = load_dataset("trl-internal-testing/zen", "standard_prompt_only", split="train")
         training_args = GRPOConfig(output_dir=self.tmp_dir, use_liger_kernel=True, report_to="none")
+        # ensure_weight_tying suppresses the PEFT weight-tying warning, which fires for modules_to_save since PEFT 0.19.0
+        peft_config = LoraConfig(
+            target_modules=["q_proj", "v_proj"],
+            modules_to_save=["lm_head"],
+            **({"ensure_weight_tying": True} if Version(peft.__version__) >= Version("0.19.0") else {}),
+        )
         kwargs = {
             "model": model,
             "reward_funcs": "trl-internal-testing/tiny-Qwen2ForSequenceClassification-2.5",
             "args": training_args,
             "train_dataset": dataset,
-            "peft_config": LoraConfig(target_modules=["q_proj", "v_proj"], modules_to_save=["lm_head"]),
+            "peft_config": peft_config,
         }
         if is_liger_kernel_available():
             GRPOTrainer(**kwargs)  # must construct without raising
@@ -1391,7 +1403,7 @@ class TestGRPOTrainer(TrlTestCase):
 
         with (
             patch.object(trainer, "_generate_and_score_completions", side_effect=gen_with_is_ratio),
-            patch.object(trainer.liger_grpo_loss, "forward", wraps=trainer.liger_grpo_loss.forward) as mock_forward,
+            patch.object(trainer.liger_loss, "forward", wraps=trainer.liger_loss.forward) as mock_forward,
         ):
             trainer.train()
 
@@ -3072,7 +3084,7 @@ class TestGRPOTrainerSlow(TrlTestCase):
         )
         from liger_kernel.chunked_loss import LigerFusedLinearGRPOLoss
 
-        assert isinstance(trainer.liger_grpo_loss, LigerFusedLinearGRPOLoss)
+        assert isinstance(trainer.liger_loss, LigerFusedLinearGRPOLoss)
 
         previous_trainable_params = {n: param.clone() for n, param in model.named_parameters()}
 
@@ -3131,7 +3143,7 @@ class TestGRPOTrainerSlow(TrlTestCase):
         )
         from liger_kernel.chunked_loss import LigerFusedLinearGRPOLoss
 
-        assert isinstance(trainer.liger_grpo_loss, LigerFusedLinearGRPOLoss)
+        assert isinstance(trainer.liger_loss, LigerFusedLinearGRPOLoss)
 
         # Verify PEFT adapter is properly initialized
         from peft import PeftModel
@@ -3182,7 +3194,7 @@ class TestGRPOTrainerSlow(TrlTestCase):
         )
         from liger_kernel.chunked_loss import LigerFusedLinearGRPOLoss
 
-        assert isinstance(trainer.liger_grpo_loss, LigerFusedLinearGRPOLoss)
+        assert isinstance(trainer.liger_loss, LigerFusedLinearGRPOLoss)
 
         previous_trainable_params = {n: param.clone() for n, param in model.named_parameters()}
 

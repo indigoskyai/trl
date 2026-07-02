@@ -36,7 +36,7 @@ def _run(monkeypatch, *, prompt_ids, turns, assistants, fork_threshold=1024, max
     `_generate_one_turn` returns each turn. assistants: list of the message `parse_response` returns each turn.
     """
     pq, tq, aq = list(prompt_ids), list(turns), list(assistants)
-    monkeypatch.setattr(worker, "parse_response", lambda tokenizer, ids: aq.pop(0))
+    monkeypatch.setattr(worker, "parse_response", lambda tokenizer, ids, prefix=None: aq.pop(0))
 
     class _StubTokenizer:
         def apply_chat_template(self, messages, **kwargs):
@@ -56,7 +56,10 @@ def _run(monkeypatch, *, prompt_ids, turns, assistants, fork_threshold=1024, max
     loop._generate_one_turn = _generate_one_turn
     loop._execute_tool_calls = lambda tool_calls, tool_dict: ([{"role": "tool", "name": "t", "content": "ok"}], 1, 0)
 
-    return asyncio.run(loop._generate_one([{"role": "user", "content": "hi"}], {}))
+    # _generate_one returns (prompt_ids, completion, completion_ids, sequences, n_calls, n_failures);
+    # drop the leading prompt_ids, which the tests below don't assert on.
+    _prompt_ids, *rest = asyncio.run(loop._generate_one([{"role": "user", "content": "hi"}], {}))
+    return tuple(rest)
 
 
 class TestMessageRolloutLoop(TrlTestCase):
