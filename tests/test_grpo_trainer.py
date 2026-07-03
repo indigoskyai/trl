@@ -39,7 +39,6 @@ from transformers.utils import is_peft_available
 
 from trl import GRPOConfig, GRPOTrainer
 from trl.import_utils import is_liger_kernel_available
-from trl.trainer.utils import get_kbit_device_map
 
 from .testing_utils import (
     TrlTestCase,
@@ -57,7 +56,8 @@ from .testing_utils import (
 
 if is_peft_available():
     import peft
-    from peft import LoraConfig, PeftModel, get_peft_model
+    from peft import LoraConfig, PeftModel, PromptTuningConfig, get_peft_model
+    from peft.utils import TaskType
 
 
 def multiply_tool(a: int, b: int) -> int:
@@ -638,6 +638,22 @@ class TestGRPOTrainer(TrlTestCase):
         else:
             with pytest.raises(ImportError):
                 GRPOTrainer(**kwargs)
+
+    @require_peft
+    def test_liger_kernel_with_peft_prompt_learning_raises(self):
+        # Prompt-learning methods inject virtual tokens via PeftModel.forward(), which the Liger GRPO loss bypasses.
+        # The trainer must fail fast to avoid computing the loss on the wrong (truncated) sequence.
+        model = AutoModelForCausalLM.from_pretrained("trl-internal-testing/tiny-Qwen2ForCausalLM-2.5", dtype="float32")
+        dataset = load_dataset("trl-internal-testing/zen", "standard_prompt_only", split="train")
+        training_args = GRPOConfig(output_dir=self.tmp_dir, use_liger_kernel=True, report_to="none")
+        with pytest.raises(ValueError, match="prompt-learning"):
+            GRPOTrainer(
+                model=model,
+                reward_funcs="trl-internal-testing/tiny-Qwen2ForSequenceClassification-2.5",
+                args=training_args,
+                train_dataset=dataset,
+                peft_config=PromptTuningConfig(task_type=TaskType.CAUSAL_LM, num_virtual_tokens=8),
+            )
 
     @require_peft
     def test_train_peft_model(self):
@@ -3303,7 +3319,6 @@ class TestGRPOTrainerSlow(TrlTestCase):
             model_name,
             attn_implementation="kernels-community/flash-attn2",
             dtype="bfloat16",
-            device_map=get_kbit_device_map(),
             quantization_config=quantization_config,
         )
 
